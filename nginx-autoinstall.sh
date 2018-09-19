@@ -13,13 +13,12 @@ if [[ "$EUID" -ne 0 ]]; then
 fi
 
 
-file="/usr/bin/testingsdome"
-if [ -f "$file" ]
+file_curl="/usr/bin/curl"
+if [ -f "$file_curl" ]
 then
-	echo "$file found."
-	exit 1
+	echo "$file_curl found."
 else
-	echo "$file not found."
+	echo "$file_curl not found."
 	exit 1
 fi
 
