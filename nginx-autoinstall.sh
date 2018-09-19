@@ -12,10 +12,19 @@ if [[ "$EUID" -ne 0 ]]; then
 	exit 1
 fi
 
+
+file="/usr/bin/testingsdome"
+if [ -f "$file" ]
+then
+	echo "$file found."
+else
+	echo "$file not found."
+fi
+
 # Variables
 NGINX_MAINLINE_VER=1.15.3
 NGINX_STABLE_VER=1.14.0
-LIBRESSL_VER=2.7.4
+LIBRESSL_VER=$(curl -sL https://ftp.openbsd.org/pub/OpenBSD/LibreSSL/ 2>&1 | grep -E -o 'libressl\-[0-9.]+\.tar[.a-z]*' | awk -F "libressl-" '/.tar.gz$/ {print $2}' | sed -e 's|.tar.gz||g' | tail -n 1 2>&1)
 OPENSSL_VER=1.1.0i
 NPS_VER=1.13.35.2
 HEADERMOD_VER=0.33
@@ -374,7 +383,6 @@ case $OPTION in
 		NGINX_MODULES="--without-http_ssi_module \
 		--without-http_scgi_module \
 		--without-http_uwsgi_module \
-		--without-http_geo_module \
 		--without-http_split_clients_module \
 		--without-http_memcached_module \
 		--without-http_empty_gif_module \
@@ -428,8 +436,8 @@ case $OPTION in
 		# Cloudflare's TLS Dynamic Record Resizing patch
 		if [[ "$TCP" = 'y' ]]; then
 			echo -ne "       TLS Dynamic Records support    [..]\r"
-			wget https://raw.githubusercontent.com/cloudflare/sslconfig/master/patches/nginx__1.11.5_dynamic_tls_records.patch >> /tmp/nginx-autoinstall.log 2>&1
-			patch -p1 < nginx__1.11.5_dynamic_tls_records.patch >> /tmp/nginx-autoinstall.log 2>&1
+			wget https://raw.githubusercontent.com/kn007/patch/master/nginx.patch >> /tmp/nginx-autoinstall.log 2>&1
+			patch -p1 < nginx.patch >> /tmp/nginx-autoinstall.log 2>&1
 		        
 			if [ $? -eq 0 ]; then
 				echo -ne "       TLS Dynamic Records support    [${CGREEN}OK${CEND}]\r"
@@ -628,7 +636,7 @@ case $OPTION in
 	exit
 	;;
 	3) # Update the script
-		wget https://raw.githubusercontent.com/Angristan/nginx-autoinstall/master/nginx-autoinstall.sh -O nginx-autoinstall.sh >> /tmp/nginx-autoinstall.log 2>&1
+		wget https://raw.githubusercontent.com/quyentruong/nginx-autoinstall/master/nginx-autoinstall.sh -O nginx-autoinstall.sh >> /tmp/nginx-autoinstall.log 2>&1
 		chmod +x nginx-autoinstall.sh
 		echo ""
 		echo -e "${CGREEN}Update succcessful !${CEND}"
