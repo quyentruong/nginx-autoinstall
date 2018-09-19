@@ -17,8 +17,10 @@ file="/usr/bin/testingsdome"
 if [ -f "$file" ]
 then
 	echo "$file found."
+	exit 1
 else
 	echo "$file not found."
+	exit 1
 fi
 
 # Variables
