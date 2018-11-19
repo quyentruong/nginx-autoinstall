@@ -87,9 +87,6 @@ case $OPTION in
 		while [[ $FANCYINDEX != "y" && $FANCYINDEX != "n" ]]; do
 			read -p "       Fancy index [y/n]: " -e FANCYINDEX
 		done
-		while [[ $TCP != "y" && $TCP != "n" ]]; do
-			read -p "       Cloudflare's TLS Dynamic Record Resizing patch [y/n]: " -e TCP
-		done
 		while [[ $CACHEPURGE != "y" && $CACHEPURGE != "n" ]]; do
 			read -p "       ngx_cache_purge [y/n]: " -e CACHEPURGE
 		done
@@ -433,24 +430,6 @@ case $OPTION in
 		# Cache Purge
 		if [[ "$CACHEPURGE" = 'y' ]]; then
 			NGINX_MODULES=$(echo $NGINX_MODULES; echo "--add-module=/usr/local/src/nginx/modules/ngx_cache_purge")
-		fi
-
-		# Cloudflare's TLS Dynamic Record Resizing patch
-		if [[ "$TCP" = 'y' ]]; then
-			echo -ne "       TLS Dynamic Records support    [..]\r"
-			wget https://raw.githubusercontent.com/kn007/patch/master/nginx.patch >> /tmp/nginx-autoinstall.log 2>&1
-			patch -p1 < nginx.patch >> /tmp/nginx-autoinstall.log 2>&1
-		        
-			if [ $? -eq 0 ]; then
-				echo -ne "       TLS Dynamic Records support    [${CGREEN}OK${CEND}]\r"
-				echo -ne "\n"
-			else
-				echo -e "       TLS Dynamic Records support    [${CRED}FAIL${CEND}]"
-				echo ""
-				echo "Please look at /tmp/nginx-autoinstall.log"
-				echo ""
-				exit 1
-			fi
 		fi
 		
 		# Fancy index
