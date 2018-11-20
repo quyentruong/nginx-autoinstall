@@ -27,7 +27,7 @@ NGINX=($(curl -sL http://nginx.org/en/download.html 2>&1 | grep -E -o 'nginx\-[0
 NGINX_MAINLINE_VER=${NGINX[0]}
 NGINX_STABLE_VER=${NGINX[1]}
 LIBRESSL_VER=$(curl -sL https://ftp.openbsd.org/pub/OpenBSD/LibreSSL/ 2>&1 | grep -E -o 'libressl\-[0-9.]+\.tar[.a-z]*' | awk -F "libressl-" '/.tar.gz$/ {print $2}' | sed -e 's|.tar.gz||g' | tail -n 1 2>&1)
-OPENSSL_VER=$(curl -sL https://github.com/openssl/openssl/releases 2>&1 | grep -E -o '/OpenSSL\_[0-9a-z_]+\.tar[.a-z]*' | awk -F "OpenSSL_" '/.tar.gz$/ {print $2}' | sed -e 's|.tar.gz||g' | head -n 1 2>&1)
+OPENSSL_VER=$(curl -sL https://github.com/openssl/openssl/releases 2>&1 | grep -E -o '/OpenSSL\_[0-9a-z_]+\.tar[.a-z]*' | awk -F "OpenSSL_" '/.tar.gz$/ {print $2}' | sed -e 's|.tar.gz||g' | sed 's/\_/\./g' | head -n 1 2>&1)
 NPS_VER=1.13.35.2
 HEADERMOD_VER=0.33
 
