@@ -22,6 +22,15 @@ else
 	exit 1
 fi
 
+file_lsb_release="/usr/bin/lsb_release"
+if [ -f "$file_lsb_release" ]
+then
+	echo "$file_lsb_release found."
+else
+	echo "$file_lsb_release not found."
+	exit 1
+fi
+
 # Variables
 NGINX=($(curl -sL http://nginx.org/en/download.html 2>&1 | grep -E -o 'nginx\-[0-9.]+\.tar[.a-z]*' | awk -F "nginx-" '/.tar.gz$/ {print $2}' | sed -e 's|.tar.gz||g' | head -n 2 2>&1))
 NGINX_MAINLINE_VER=${NGINX[0]}
