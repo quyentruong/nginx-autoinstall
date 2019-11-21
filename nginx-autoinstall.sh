@@ -29,10 +29,14 @@ NGINX_MAINLINE_VER=${NGINX[0]}
 NGINX_STABLE_VER=${NGINX[1]}
 LIBRESSL_VER=$(curl -sL https://ftp.openbsd.org/pub/OpenBSD/LibreSSL/ 2>&1 | grep -E -o 'libressl\-[0-9.]+\.tar[.a-z]*' | awk -F "libressl-" '/.tar.gz$/ {print $2}' | sed -e 's|.tar.gz||g' | tail -n 1 2>&1)
 OPENSSL_VER=$(curl -sL https://github.com/openssl/openssl/releases 2>&1 | grep -E -o '/OpenSSL\_[0-9a-z_]+\.tar[.a-z]*' | awk -F "OpenSSL_" '/.tar.gz$/ {print $2}' | sed -e 's|.tar.gz||g' | sed 's/\_/\./g' | head -n 1 2>&1)
+
 NPS_VER=1.13.35.2
 HEADERMOD_VER=0.33
 LIBMAXMINDDB_VER=1.3.2
-GEOIP2_VER=3.2
+GEOIP2_VER=3.3
+LUA_JIT_VER=2.1-20181029
+LUA_NGINX_VER=0.10.14rc2
+NGINX_DEV_KIT=0.3.0
 
 # Define installation paramaters for headless install (fallback if unspecifed)
 if [[ "$HEADLESS" == "y" ]]; then
@@ -44,8 +48,12 @@ if [[ "$HEADLESS" == "y" ]]; then
 	GEOIP=${GEOIP:-n}
 	FANCYINDEX=${FANCYINDEX:-n}
 	CACHEPURGE=${CACHEPURGE:-n}
+	LUA=${LUA:-n}
 	WEBDAV=${WEBDAV:-n}
 	VTS=${VTS:-n}
+	TESTCOOKIE=${TESTCOOKIE:-n}
+	HTTP3=${HTTP3:-n}
+	MODSEC=${MODSEC:-n}
 	SSL=${SSL:-1}
 	RM_CONF=${RM_CONF:-y}
 	RM_LOGS=${RM_LOGS:-y}
@@ -64,10 +72,11 @@ if [[ "$HEADLESS" != "y" ]]; then
 	echo "   1) Install or update Nginx"
 	echo "   2) Uninstall Nginx"
 	echo "   3) Update the script"
-	echo "   4) Exit"
+	echo "   4) Install Bad Bot Blocker"
+	echo "   5) Exit"
 	echo ""
-	while [[ $OPTION !=  "1" && $OPTION != "2" && $OPTION != "3" && $OPTION != "4" ]]; do
-		read -p "Select an option [1-4]: " OPTION
+	while [[ $OPTION !=  "1" && $OPTION != "2" && $OPTION != "3" && $OPTION != "4" && $OPTION != "5" ]]; do
+		read -p "Select an option [1-5]: " OPTION
 	done
 fi
 
@@ -121,35 +130,54 @@ case $OPTION in
 			while [[ $CACHEPURGE != "y" && $CACHEPURGE != "n" ]]; do
 				read -p "       ngx_cache_purge [y/n]: " -e CACHEPURGE
 			done
+			while [[ $LUA != "y" && $LUA != "n" ]]; do
+				read -p "       ngx_http_lua_module [y/n]: " -e LUA
+			done
 			while [[ $WEBDAV != "y" && $WEBDAV != "n" ]]; do
 				read -p "       nginx WebDAV [y/n]: " -e WEBDAV
 			done
 			while [[ $VTS != "y" && $VTS != "n" ]]; do
 				read -p "       nginx VTS [y/n]: " -e VTS
 			done
-			echo ""
-			echo "Choose your OpenSSL implementation :"
-			echo "   1) System's OpenSSL ($(openssl version | cut -c9-14))"
-			echo "   2) OpenSSL $OPENSSL_VER from source"
-			echo "   3) LibreSSL $LIBRESSL_VER from source "
-			echo ""
-			while [[ $SSL != "1" && $SSL != "2" && $SSL != "3" ]]; do
-				read -p "Select an option [1-3]: " SSL
+			while [[ $TESTCOOKIE != "y" && $TESTCOOKIE != "n" ]]; do
+				read -p "       nginx testcookie [y/n]: " -e TESTCOOKIE
 			done
+			while [[ $HTTP3 != "y" && $HTTP3 != "n" ]]; do
+				read -p "       HTTP/3 (by Cloudflare, WILL INSTALL BoringSSL, Quiche, Rust and Go) [y/n]: " -e HTTP3
+			done
+			while [[ $MODSEC != "y" && $MODSEC != "n" ]]; do
+				read -p "       nginx ModSecurity [y/n]: " -e MODSEC
+			done
+			if [[ "$MODSEC" = 'y' ]]; then
+				read -p "       Enable nginx ModSecurity? [y/n]: " -e MODSEC_ENABLE
+			fi
+			if [[ "$HTTP3" != 'y' ]]; then
+				echo ""
+				echo "Choose your OpenSSL implementation:"
+				echo "   1) System's OpenSSL ($(openssl version | cut -c9-14))"
+				echo "   2) OpenSSL $OPENSSL_VER from source"
+				echo "   3) LibreSSL $LIBRESSL_VER from source "
+				echo ""
+				while [[ $SSL != "1" && $SSL != "2" && $SSL != "3" ]]; do
+					read -p "Select an option [1-3]: " SSL
+				done
+			fi
 		fi
-		case $SSL in
-			1)
-			;;
-			2)
-				OPENSSL=y
-			;;
-			3)
-				LIBRESSL=y
-			;;
-			*)
-				echo "SSL unspecified, fallback to system's OpenSSL ($(openssl version | cut -c9-14))"
-			;;
-		esac
+		if [[ "$HTTP3" != 'y' ]]; then
+			case $SSL in
+				1)
+				;;
+				2)
+					OPENSSL=y
+				;;
+				3)
+					LIBRESSL=y
+				;;
+				*)
+					echo "SSL unspecified, fallback to system's OpenSSL ($(openssl version | cut -c9-14))"
+				;;
+			esac
+		fi
 		if [[ "$HEADLESS" != "y" ]]; then
 			echo ""
 			read -n1 -r -p "Nginx is ready to be installed, press any key to continue..."
@@ -163,7 +191,11 @@ case $OPTION in
 
 		# Dependencies
 		apt-get update
-		apt-get install -y build-essential ca-certificates wget curl libpcre3 libpcre3-dev autoconf unzip automake libtool tar git libssl-dev zlib1g-dev uuid-dev lsb-release libxml2-dev libxslt1-dev
+		apt-get install -y build-essential ca-certificates wget curl libpcre3 libpcre3-dev autoconf unzip automake libtool tar git libssl-dev zlib1g-dev uuid-dev lsb-release libxml2-dev libxslt1-dev cmake
+
+		if [[ "$MODSEC" = 'y' ]]; then
+				apt-get install -y apt-utils libcurl4-openssl-dev libgeoip-dev liblmdb-dev libpcre++-dev libyajl-dev pkgconf
+		fi
 
 		# PageSpeed
 		if [[ "$PAGESPEED" = 'y' ]]; then
@@ -229,6 +261,28 @@ case $OPTION in
 			git clone https://github.com/FRiCKLE/ngx_cache_purge
 		fi
 
+		# Lua
+		if [[ "$LUA" = 'y' ]]; then	
+			# LuaJIT download		
+			cd /usr/local/src/nginx/modules						
+			wget https://github.com/openresty/luajit2/archive/v${LUA_JIT_VER}.tar.gz
+			tar xaf v${LUA_JIT_VER}.tar.gz
+			cd luajit2-${LUA_JIT_VER}
+			make
+			make install
+
+			# ngx_devel_kit download
+			cd /usr/local/src/nginx/modules									
+			wget https://github.com/simplresty/ngx_devel_kit/archive/v${NGINX_DEV_KIT}.tar.gz
+			tar xaf v${NGINX_DEV_KIT}.tar.gz
+
+			# lua-nginx-module download
+			cd /usr/local/src/nginx/modules			
+			wget https://github.com/openresty/lua-nginx-module/archive/v${LUA_NGINX_VER}.tar.gz
+			tar xaf v${LUA_NGINX_VER}.tar.gz
+
+		fi
+
 		# LibreSSL
 		if [[ "$LIBRESSL" = 'y' ]]; then
 			cd /usr/local/src/nginx/modules || exit 1
@@ -253,6 +307,27 @@ case $OPTION in
 			cd openssl-${OPENSSL_VER}
 
 			./config
+		fi
+
+		# ModSecurity
+		if [[ "$MODSEC" = 'y' ]]; then
+			cd /usr/local/src/nginx/modules || exit 1
+			git clone --depth 1 -b v3/master --single-branch https://github.com/SpiderLabs/ModSecurity
+			cd ModSecurity
+			git submodule init
+			git submodule update
+			./build.sh
+			./configure
+			make
+			make install
+			mkdir /etc/nginx/modsec
+			wget -P /etc/nginx/modsec/ https://raw.githubusercontent.com/SpiderLabs/ModSecurity/v3/master/modsecurity.conf-recommended
+			mv /etc/nginx/modsec/modsecurity.conf-recommended /etc/nginx/modsec/modsecurity.conf
+
+			# Enable ModSecurity in Nginx
+			if [[ "$MODSEC_ENABLE" = 'y' ]]; then
+				sed -i 's/SecRuleEngine DetectionOnly/SecRuleEngine On/' /etc/nginx/modsec/modsecurity.conf
+			fi
 		fi
 
 		# Download and extract of Nginx source code
@@ -295,6 +370,11 @@ case $OPTION in
 		--with-http_realip_module \
 		--with-http_sub_module"
 
+		# Optional options
+		if [[ "$LUA" = 'y' ]]; then	
+			NGINX_OPTIONS=$(echo $NGINX_OPTIONS; echo --with-ld-opt="-Wl,-rpath,/usr/local/lib/")
+		fi
+
 		# Optional modules
 		if [[ "$LIBRESSL" = 'y' ]]; then
 			NGINX_MODULES=$(echo "$NGINX_MODULES"; echo --with-openssl=/usr/local/src/nginx/modules/libressl-${LIBRESSL_VER})
@@ -324,6 +404,12 @@ case $OPTION in
 			NGINX_MODULES=$(echo "$NGINX_MODULES"; echo "--add-module=/usr/local/src/nginx/modules/ngx_cache_purge")
 		fi
 
+		# Lua
+		if [[ "$LUA" = 'y' ]]; then
+			NGINX_MODULES=$(echo $NGINX_MODULES; echo "--add-module=/usr/local/src/nginx/modules/ngx_devel_kit-${NGINX_DEV_KIT}")
+			NGINX_MODULES=$(echo $NGINX_MODULES; echo "--add-module=/usr/local/src/nginx/modules/lua-nginx-module-${LUA_NGINX_VER}")
+		fi
+
 		if [[ "$FANCYINDEX" = 'y' ]]; then
 			git clone --quiet https://github.com/aperezdc/ngx-fancyindex.git /usr/local/src/nginx/modules/fancyindex
 			NGINX_MODULES=$(echo "$NGINX_MODULES"; echo --add-module=/usr/local/src/nginx/modules/fancyindex)
@@ -337,6 +423,39 @@ case $OPTION in
 		if [[ "$VTS" = 'y' ]]; then
 			git clone --quiet https://github.com/vozlt/nginx-module-vts.git /usr/local/src/nginx/modules/nginx-module-vts
 			NGINX_MODULES=$(echo "$NGINX_MODULES"; echo --add-module=/usr/local/src/nginx/modules/nginx-module-vts)
+		fi
+
+		if [[ "$TESTCOOKIE" = 'y' ]]; then
+			git clone --quiet https://github.com/kyprizel/testcookie-nginx-module.git /usr/local/src/nginx/modules/testcookie-nginx-module
+			NGINX_MODULES=$(echo "$NGINX_MODULES"; echo --add-module=/usr/local/src/nginx/modules/testcookie-nginx-module)
+		fi
+
+		if [[ "$MODSEC" = 'y' ]]; then
+			git clone --quiet https://github.com/SpiderLabs/ModSecurity-nginx.git /usr/local/src/nginx/modules/ModSecurity-nginx
+			NGINX_MODULES=$(echo "$NGINX_MODULES"; echo --add-module=/usr/local/src/nginx/modules/ModSecurity-nginx)
+		fi
+
+		# HTTP3
+		if [[ "$HTTP3" = 'y' ]]; then
+			cd /usr/local/src/nginx/modules || exit 1
+			git clone --recursive https://github.com/cloudflare/quiche
+			# Dependencies for BoringSSL and Quiche
+			apt-get install -y golang
+			# Rust is not packaged so that's the only way...
+			curl -sSf https://sh.rustup.rs | sh -s -- -y
+			source $HOME/.cargo/env
+
+			cd /usr/local/src/nginx/nginx-${NGINX_VER} || exit 1
+			# Apply actual patch
+			patch -p01 < /usr/local/src/nginx/modules/quiche/extras/nginx/nginx-1.16.patch
+
+			NGINX_OPTIONS=$(echo "$NGINX_OPTIONS"; echo --with-openssl=/usr/local/src/nginx/modules/quiche/deps/boringssl --with-quiche=/usr/local/src/nginx/modules/quiche)
+			NGINX_MODULES=$(echo "$NGINX_MODULES"; echo --with-http_v3_module)
+		fi
+
+		if [[ "$LUA" = 'y' ]]; then	
+			export LUAJIT_LIB=/usr/local/lib/
+ 			export LUAJIT_INC=/usr/local/include/luajit-2.1/
 		fi
 
 		./configure $NGINX_OPTIONS $NGINX_MODULES
@@ -408,6 +527,8 @@ case $OPTION in
 		# Removing Nginx files and modules files
 		rm -r /usr/local/src/nginx \
 		/usr/sbin/nginx* \
+		/usr/local/bin/luajit* \
+		/usr/local/include/luajit* \
 		/etc/logrotate.d/nginx \
 		/var/cache/nginx \
 		/lib/systemd/system/nginx.service \
@@ -441,6 +562,92 @@ case $OPTION in
 		echo "Update done."
 		sleep 2
 		./nginx-autoinstall.sh
+		exit
+	;;
+	4) # Install Bad Bot Blocker
+		echo ""
+		echo "This will install Nginx Bad Bot and User-Agent Blocker."
+		echo ""
+		echo "First step is to download the install script."
+		echo ""
+		read -n1 -r -p " press any key to continue..."
+		echo ""
+
+		wget https://raw.githubusercontent.com/mitchellkrogza/nginx-ultimate-bad-bot-blocker/master/install-ngxblocker -O /usr/local/sbin/install-ngxblocker
+		chmod +x /usr/local/sbin/install-ngxblocker
+
+		echo ""
+		echo "Install script has been downloaded."
+		echo ""
+		echo "Second step is to run the install-ngxblocker script in DRY-MODE,"
+		echo "which will show you what changes it will make and what files it will download for you.."
+		echo "This is only a DRY-RUN so no changes are being made yet."
+		echo ""
+		read -n1 -r -p " press any key to continue..."
+		echo ""
+
+		cd /usr/local/sbin || exit 1
+		./install-ngxblocker
+
+		echo ""
+		echo "Third step is to run the install script with the -x parameter,"
+		echo "to download all the necessary files from the repository.."
+		echo ""
+		read -n1 -r -p " press any key to continue..."
+		echo ""
+
+		cd /usr/local/sbin/ || exit 1
+		./install-ngxblocker -x
+		chmod +x /usr/local/sbin/setup-ngxblocker
+		chmod +x /usr/local/sbin/update-ngxblocker
+
+		echo ""
+		echo "All the required files have now been downloaded to the correct folders,"
+		echo " on Nginx for you directly from the repository."
+		echo ""
+		echo "Fourth step is to run the setup-ngxblocker script in DRY-MODE,"
+		echo "which will show you what changes it will make and what files it will download for you."
+		echo "This is only a DRY-RUN so no changes are being made yet."
+		echo ""
+		read -n1 -r -p " press any key to continue..."
+		echo ""
+
+		cd /usr/local/sbin/ || exit 1
+		./setup-ngxblocker -e conf
+
+		echo ""
+		echo "Fifth step is to run the setup script with the -x parameter,"
+		echo "to make all the necessary changes to your nginx.conf (if required),"
+		echo "and also to add the required includes into all your vhost files."
+		echo ""
+		read -n1 -r -p " press any key to continue..."
+		echo ""
+
+		cd /usr/local/sbin/ || exit 1
+		./setup-ngxblocker -x -e conf
+
+		echo ""
+		echo "Sixth step is to test your nginx configuration"
+		echo ""
+		read -n1 -r -p " press any key to continue..."
+		echo ""
+
+		/usr/sbin/nginx -t
+
+		echo ""
+		echo "Seventh step is to restart Nginx,"
+		echo "and the Bot Blocker will immediately be active and protecting all your web sites."
+		echo ""
+		read -n1 -r -p " press any key to continue..."
+		echo ""
+
+		/usr/sbin/nginx -t && systemctl restart nginx
+
+		echo "That's it, the blocker is now active and protecting your sites from thousands of malicious bots and domains."
+		echo ""
+		echo "For more info, visit: https://github.com/mitchellkrogza/nginx-ultimate-bad-bot-blocker"
+		echo ""
+		sleep 2
 		exit
 	;;
 	*) # Exit
