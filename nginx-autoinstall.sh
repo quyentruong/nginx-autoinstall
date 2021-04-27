@@ -26,7 +26,7 @@ else
 fi
 
 # Variables
-NGINX=($(curl -sL http://nginx.org/en/download.html 2>&1 | grep -E -o 'nginx\-[0-9.]+\.tar[.a-z]*' | awk -F "nginx-" '/.tar.gz$/ {print $2}' | sed -e 's|.tar.gz||g' | head -n 2 2>&1))
+mapfile -t NGINX < <(curl -sL http://nginx.org/en/download.html 2>&1 | grep -E -o 'nginx\-[0-9.]+\.tar[.a-z]*' | awk -F "nginx-" '/.tar.gz$/ {print $2}' | sed -e 's|.tar.gz||g' | head -n 2 2>&1)
 NGINX_MAINLINE_VER=${NGINX[0]}
 NGINX_STABLE_VER=${NGINX[1]}
 LIBRESSL_VER=$(curl -sL https://ftp.openbsd.org/pub/OpenBSD/LibreSSL/ 2>&1 | grep -E -o 'libressl\-[0-9.]+\.tar[.a-z]*' | awk -F "libressl-" '/.tar.gz$/ {print $2}' | sed -e 's|.tar.gz||g' | tail -n 1 2>&1)
